@@ -66,7 +66,7 @@ func TestProductUpdate_InitialStateCheck(t *testing.T) {
 
 	e := newEasee()
 
-	assert.False(t, e.initialStatePresent)
+	assert.False(t, e.optionalStatePresent())
 
 	tc := []struct {
 		obsId           easee.ObservationID
@@ -74,7 +74,6 @@ func TestProductUpdate_InitialStateCheck(t *testing.T) {
 		value           string
 		expectInitState bool
 	}{
-		{easee.CHARGER_OP_MODE, easee.Integer, "2", false},
 		{easee.TOTAL_POWER, easee.Double, "11.0", false},
 		{easee.SESSION_ENERGY, easee.Double, "22.0", false},
 		{easee.LIFETIME_ENERGY, easee.Double, "1000.0", true},
@@ -84,7 +83,7 @@ func TestProductUpdate_InitialStateCheck(t *testing.T) {
 		t.Logf("%+v", tc)
 
 		e.ProductUpdate(createPayload(tc.obsId, now, tc.dataType, tc.value))
-		assert.Equal(t, tc.expectInitState, e.initialStatePresent)
+		assert.Equal(t, tc.expectInitState, e.optionalStatePresent())
 	}
 }
 

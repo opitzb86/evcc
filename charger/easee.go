@@ -55,7 +55,6 @@ type Easee struct {
 	smartCharging         bool
 	authorize             bool
 	enabled               bool
-	initialStatePresent   bool
 	opMode                int
 	pilotMode             string
 	reasonForNoCurrent    int
@@ -193,7 +192,29 @@ func NewEasee(user, password, charger string, timeout time.Duration, authorize b
 		err = os.ErrDeadlineExceeded
 	}
 
+	if err == nil {
+		c.waitForOptionalState()
+	}
+
 	return c, err
+}
+
+func (c *Easee) waitForOptionalState() {
+	for i := 0; i < 30; i++ {
+		if c.optionalStatePresent() {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	c.log.WARN.Println("did not receive full state from cloud")
+}
+
+// check c.obsTime for presence of ALL of the following keys: easee.SESSION_ENERGY, easee.LIFETIME_ENERGY
+func (c *Easee) optionalStatePresent() bool {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	wanted := []easee.ObservationID{easee.SESSION_ENERGY, easee.LIFETIME_ENERGY, easee.TOTAL_POWER}
+	return len(wanted) == len(lo.Intersect(wanted, lo.Keys(c.obsTime)))
 }
 
 func (c *Easee) chargerSite(charger string) (easee.Site, error) {
@@ -313,6 +334,10 @@ func (c *Easee) ProductUpdate(i json.RawMessage) {
 		c.dynamicChargerCurrent = value.(float64)
 	case easee.CHARGER_OP_MODE:
 		c.opMode = value.(int)
+
+		// startup completed
+		c.startDone()
+
 	case easee.REASON_FOR_NO_CURRENT:
 		c.reasonForNoCurrent = value.(int)
 	case easee.PILOT_MODE:
@@ -323,22 +348,6 @@ func (c *Easee) ProductUpdate(i json.RawMessage) {
 	case c.obsC <- res:
 	default:
 	}
-
-	if !c.initialStatePresent && c.checkInitialStatePresent() {
-		// startup completed
-		c.initialStatePresent = true
-		c.startDone()
-	}
-}
-
-// check c.obsTime for presence of ALL of the following keys: easee.SESSION_ENERGY, easee.LIFETIME_ENERGY, easee.CHARGER_OP_MODE
-func (c *Easee) checkInitialStatePresent() bool {
-	for _, key := range []easee.ObservationID{easee.SESSION_ENERGY, easee.LIFETIME_ENERGY, easee.CHARGER_OP_MODE, easee.TOTAL_POWER} {
-		if _, exists := c.obsTime[key]; !exists {
-			return false
-		}
-	}
-	return true
 }
 
 // ChargerUpdate implements the signalr receiver
